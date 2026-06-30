@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Medical Records | Health Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app-shell" id="appShell"></div>
+
+  <div class="modal-overlay" id="recordModal">
+    <div class="modal-box">
+      <h2>Add Medical Record</h2>
+      <div class="error-banner" id="modalError"></div>
+      <form id="recordForm">
+        <div class="field">
+          <label for="title">Record title</label>
+          <input type="text" id="title" placeholder="e.g. Blood Test Report" required>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="recordType">Record type</label>
+            <select id="recordType">
+              <option value="Lab Report">Lab Report</option>
+              <option value="Prescription">Prescription</option>
+              <option value="Diagnosis">Diagnosis</option>
+              <option value="Vaccination">Vaccination</option>
+              <option value="Scan/Imaging">Scan / Imaging</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="recordDate">Record date</label>
+            <input type="date" id="recordDate">
+          </div>
+        </div>
+        <div class="field">
+          <label for="description">Description / notes</label>
+          <textarea id="description" rows="3" placeholder="Optional notes about this record"></textarea>
+        </div>
+        <div class="field">
+          <label for="file">Attach files (PDF, image, or Word doc — up to 10, optional)</label>
+          <input type="file" id="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" multiple>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="closeRecordModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="saveRecordBtn">Save Record</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="shareModal">
+    <div class="modal-box">
+      <h2>Share Record with Doctor</h2>
+      <div class="error-banner" id="shareError"></div>
+      <div class="success-banner" id="shareSuccess"></div>
+      <form id="shareForm">
+        <div class="field">
+          <label for="doctorEmail">Doctor's email (optional)</label>
+          <input type="email" id="doctorEmail" placeholder="doctor@example.com">
+        </div>
+        <div class="field">
+          <label for="expiresInDays">Link expires in (days)</label>
+          <input type="number" id="expiresInDays" value="7" min="1" max="90">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="closeShareModal()">Close</button>
+          <button type="submit" class="btn btn-secondary" id="shareBtn">Generate Link</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/sidebar.js"></script>
+  <script>
+    requireAuth();
+    let currentShareRecordId = null;
+
+    document.getElementById('appShell').innerHTML = `
+      ${renderSidebar('records')}
+      <main class="main">
+        <div class="page-header">
+          <div>
+            <h1>Medical Records</h1>
+            <div class="sub">Securely store and manage your health documents.</div>
+          </div>
+          <button class="btn btn-primary" style="width:auto;" onclick="openRecordModal()">+ Add Record</button>
+        </div>
+        <div class="card">
+          <div id="recordsTableWrap"><div class="empty-state">Loading...</div></div>
+        </div>
+      </main>
+    `;
+
+    function openRecordModal() {
+      document.getElementById('recordForm').reset();
+      document.getElementById('modalError').style.display = 'none';
+      document.getElementById('recordModal').classList.add('open');
+    }
+    function closeRecordModal() {
+      document.getElementById('recordModal').classList.remove('open');
+    }
+    function openShareModal(recordId) {
+      currentShareRecordId = recordId;
+      document.getElementById('shareForm').reset();
+      document.getElementById('expiresInDays').value = 7;
+      document.getElementById('shareError').style.display = 'none';
+      document.getElementById('shareSuccess').style.display = 'none';
+      document.getElementById('shareModal').classList.add('open');
+    }
+    function closeShareModal() {
+      document.getElementById('shareModal').classList.remove('open');
+    }
+
+    async function loadRecords() {
+      const wrap = document.getElementById('recordsTableWrap');
+      try {
+        const records = await apiRequest('/records');
+        if (!records.length) {
+          wrap.innerHTML = `<div class="empty-state"><div class="big-icon">&#128196;</div>No medical records yet. Click "Add Record" to upload your first one.</div>`;
+          return;
+        }
+        wrap.innerHTML = `
+          <table>
+            <thead><tr><th>Title</th><th>Type</th><th>Date</th><th>File</th><th></th></tr></thead>
+            <tbody>
+              ${records.map(r => `
+                <tr>
+                  <td><strong>${escapeHtml(r.title)}</strong>${r.description ? `<div style="color:var(--text-muted); font-size:12.5px; margin-top:2px;">${escapeHtml(r.description)}</div>` : ''}</td>
+                  <td>${escapeHtml(r.record_type || '-')}</td>
+                  <td>${formatDate(r.record_date || r.created_at)}</td>
+                  <td>${
+                    r.files && r.files.length
+                      ? r.files.map((f, i) => `<div><a href="#" onclick="downloadFile(${r.id}, ${i}); return false;">${escapeHtml(f.fileName)}</a></div>`).join('')
+                      : '-'
+                  }</td>
+                  <td style="white-space:nowrap; text-align:right;">
+                    ${r.files && r.files.length ? `<button class="icon-btn" title="Share with doctor" onclick="openShareModal(${r.id})">&#128279;</button>` : ''}
+                    <button class="icon-btn danger" title="Delete" onclick="deleteRecord(${r.id})">&#128465;</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+      } catch (err) {
+        wrap.innerHTML = `<div class="empty-state">Could not load records.</div>`;
+      }
+    }
+
+    async function downloadFile(id, fileIndex) {
+      const token = getToken();
+      const res = await fetch(`/api/records/${id}/file/${fileIndex || 0}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) { alert('Could not download file.'); return; }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = '';
+      document.body.appendChild(a); a.click(); a.remove();
+      window.URL.revokeObjectURL(url);
+    }
+
+    async function deleteRecord(id) {
+      if (!confirm('Delete this medical record? This cannot be undone.')) return;
+      try {
+        await apiRequest(`/records/${id}`, { method: 'DELETE' });
+        loadRecords();
+      } catch (err) {
+        alert(err.message || 'Could not delete record.');
+      }
+    }
+
+    document.getElementById('recordForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errBanner = document.getElementById('modalError');
+      errBanner.style.display = 'none';
+
+      const formData = new FormData();
+      formData.append('title', document.getElementById('title').value.trim());
+      formData.append('recordType', document.getElementById('recordType').value);
+      formData.append('recordDate', document.getElementById('recordDate').value);
+      formData.append('description', document.getElementById('description').value.trim());
+      const fileInput = document.getElementById('file');
+      const selectedFiles = Array.from(fileInput.files || []);
+      if (selectedFiles.length > 10) {
+        errBanner.textContent = 'You can attach a maximum of 10 files per record.';
+        errBanner.style.display = 'block';
+        return;
+      }
+      selectedFiles.forEach((f) => formData.append('files', f));
+
+      const btn = document.getElementById('saveRecordBtn');
+      btn.disabled = true; btn.textContent = 'Saving...';
+
+      try {
+        await apiRequest('/records', { method: 'POST', body: formData, isForm: true });
+        closeRecordModal();
+        loadRecords();
+      } catch (err) {
+        errBanner.textContent = err.message || 'Could not save record.';
+        errBanner.style.display = 'block';
+      } finally {
+        btn.disabled = false; btn.textContent = 'Save Record';
+      }
+    });
+
+    document.getElementById('shareForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errBanner = document.getElementById('shareError');
+      const successBanner = document.getElementById('shareSuccess');
+      errBanner.style.display = 'none';
+      successBanner.style.display = 'none';
+
+      const doctorEmail = document.getElementById('doctorEmail').value.trim();
+      const expiresInDays = document.getElementById('expiresInDays').value;
+
+      const btn = document.getElementById('shareBtn');
+      btn.disabled = true; btn.textContent = 'Generating...';
+
+      try {
+        const data = await apiRequest(`/records/${currentShareRecordId}/share`, {
+          method: 'POST',
+          body: { doctorEmail, expiresInDays },
+        });
+        const fullUrl = `${window.location.origin}${data.shareUrl}`;
+        successBanner.innerHTML = `Share link created (expires ${formatDate(data.expiresAt)}):<br><code style="word-break:break-all;">${fullUrl}</code>`;
+        successBanner.style.display = 'block';
+      } catch (err) {
+        errBanner.textContent = err.message || 'Could not create share link.';
+        errBanner.style.display = 'block';
+      } finally {
+        btn.disabled = false; btn.textContent = 'Generate Link';
+      }
+    });
+
+    loadRecords();
+  </script>
+</body>
+</html>

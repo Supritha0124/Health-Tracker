@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Appointments | Health Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app-shell" id="appShell"></div>
+
+  <div class="modal-overlay" id="apptModal">
+    <div class="modal-box">
+      <h2 id="apptModalTitle">Schedule Appointment</h2>
+      <div class="error-banner" id="apptModalError"></div>
+      <form id="apptForm">
+        <input type="hidden" id="apptId">
+        <div class="field">
+          <label for="doctorName">Doctor's name</label>
+          <input type="text" id="doctorName" placeholder="e.g. Dr. Sarah Patel" required>
+        </div>
+        <div class="field">
+          <label for="specialization">Specialization</label>
+          <input type="text" id="specialization" placeholder="e.g. Cardiologist">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="appointmentDate">Date</label>
+            <input type="date" id="appointmentDate" required>
+          </div>
+          <div class="field">
+            <label for="appointmentTime">Time</label>
+            <input type="time" id="appointmentTime">
+          </div>
+        </div>
+        <div class="field">
+          <label for="location">Location / clinic</label>
+          <input type="text" id="location" placeholder="Optional">
+        </div>
+        <div class="field">
+          <label for="notes">Notes</label>
+          <textarea id="notes" rows="2" placeholder="Optional"></textarea>
+        </div>
+        <div class="field" id="statusField" style="display:none;">
+          <label for="status">Status</label>
+          <select id="status">
+            <option value="scheduled">Scheduled</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="closeApptModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="saveApptBtn">Save Appointment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/sidebar.js"></script>
+  <script>
+    requireAuth();
+
+    document.getElementById('appShell').innerHTML = `
+      ${renderSidebar('appointments')}
+      <main class="main">
+        <div class="page-header">
+          <div>
+            <h1>Appointments</h1>
+            <div class="sub">Track consultations and visits with your doctors.</div>
+          </div>
+          <button class="btn btn-primary" style="width:auto;" onclick="openApptModal()">+ Schedule Appointment</button>
+        </div>
+        <div class="card">
+          <div id="apptTableWrap"><div class="empty-state">Loading...</div></div>
+        </div>
+      </main>
+    `;
+
+    function openApptModal(appt) {
+      document.getElementById('apptForm').reset();
+      document.getElementById('apptModalError').style.display = 'none';
+      document.getElementById('statusField').style.display = appt ? 'block' : 'none';
+      document.getElementById('apptModalTitle').textContent = appt ? 'Edit Appointment' : 'Schedule Appointment';
+      document.getElementById('apptId').value = appt ? appt.id : '';
+      document.getElementById('doctorName').value = appt ? appt.doctor_name : '';
+      document.getElementById('specialization').value = appt ? (appt.specialization || '') : '';
+      document.getElementById('appointmentDate').value = appt ? appt.appointment_date : '';
+      document.getElementById('appointmentTime').value = appt ? (appt.appointment_time || '') : '';
+      document.getElementById('location').value = appt ? (appt.location || '') : '';
+      document.getElementById('notes').value = appt ? (appt.notes || '') : '';
+      document.getElementById('status').value = appt ? appt.status : 'scheduled';
+      document.getElementById('apptModal').classList.add('open');
+    }
+    function closeApptModal() {
+      document.getElementById('apptModal').classList.remove('open');
+    }
+
+    let allAppts = [];
+
+    async function loadAppointments() {
+      const wrap = document.getElementById('apptTableWrap');
+      try {
+        allAppts = await apiRequest('/appointments');
+        if (!allAppts.length) {
+          wrap.innerHTML = `<div class="empty-state"><div class="big-icon">&#128197;</div>No appointments scheduled yet.</div>`;
+          return;
+        }
+        wrap.innerHTML = `
+          <table>
+            <thead><tr><th>Doctor</th><th>Specialization</th><th>Date</th><th>Time</th><th>Location</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              ${allAppts.map(a => `
+                <tr>
+                  <td><strong>${escapeHtml(a.doctor_name)}</strong></td>
+                  <td>${escapeHtml(a.specialization || '-')}</td>
+                  <td>${formatDate(a.appointment_date)}</td>
+                  <td>${escapeHtml(a.appointment_time || '-')}</td>
+                  <td>${escapeHtml(a.location || '-')}</td>
+                  <td><span class="badge badge-${a.status}">${escapeHtml(a.status)}</span></td>
+                  <td style="white-space:nowrap; text-align:right;">
+                    <button class="icon-btn" title="Edit" onclick='editAppt(${a.id})'>&#9998;</button>
+                    <button class="icon-btn danger" title="Delete" onclick="deleteAppt(${a.id})">&#128465;</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+      } catch (err) {
+        wrap.innerHTML = `<div class="empty-state">Could not load appointments.</div>`;
+      }
+    }
+
+    function editAppt(id) {
+      const appt = allAppts.find(a => a.id === id);
+      if (appt) openApptModal(appt);
+    }
+
+    async function deleteAppt(id) {
+      if (!confirm('Delete this appointment?')) return;
+      try {
+        await apiRequest(`/appointments/${id}`, { method: 'DELETE' });
+        loadAppointments();
+      } catch (err) {
+        alert(err.message || 'Could not delete appointment.');
+      }
+    }
+
+    document.getElementById('apptForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errBanner = document.getElementById('apptModalError');
+      errBanner.style.display = 'none';
+
+      const id = document.getElementById('apptId').value;
+      const payload = {
+        doctorName: document.getElementById('doctorName').value.trim(),
+        specialization: document.getElementById('specialization').value.trim(),
+        appointmentDate: document.getElementById('appointmentDate').value,
+        appointmentTime: document.getElementById('appointmentTime').value,
+        location: document.getElementById('location').value.trim(),
+        notes: document.getElementById('notes').value.trim(),
+        status: document.getElementById('status').value,
+      };
+
+      const btn = document.getElementById('saveApptBtn');
+      btn.disabled = true; btn.textContent = 'Saving...';
+
+      try {
+        if (id) {
+          await apiRequest(`/appointments/${id}`, { method: 'PUT', body: payload });
+        } else {
+          await apiRequest('/appointments', { method: 'POST', body: payload });
+        }
+        closeApptModal();
+        loadAppointments();
+      } catch (err) {
+        errBanner.textContent = err.message || 'Could not save appointment.';
+        errBanner.style.display = 'block';
+      } finally {
+        btn.disabled = false; btn.textContent = 'Save Appointment';
+      }
+    });
+
+    loadAppointments();
+  </script>
+</body>
+</html>

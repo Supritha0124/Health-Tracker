@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Medications | Health Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app-shell" id="appShell"></div>
+
+  <div class="modal-overlay" id="medModal">
+    <div class="modal-box">
+      <h2 id="medModalTitle">Add Medication</h2>
+      <div class="error-banner" id="medModalError"></div>
+      <form id="medForm">
+        <input type="hidden" id="medId">
+        <div class="field">
+          <label for="medicineName">Medicine name</label>
+          <input type="text" id="medicineName" placeholder="e.g. Metformin 500mg" required>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="dosage">Dosage</label>
+            <input type="text" id="dosage" placeholder="e.g. 1 tablet">
+          </div>
+          <div class="field">
+            <label for="frequency">Frequency</label>
+            <input type="text" id="frequency" placeholder="e.g. Twice daily">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="startDate">Start date</label>
+            <input type="date" id="startDate">
+          </div>
+          <div class="field">
+            <label for="endDate">End date</label>
+            <input type="date" id="endDate">
+          </div>
+        </div>
+        <div class="field">
+          <label for="notes">Notes</label>
+          <textarea id="notes" rows="2" placeholder="Optional"></textarea>
+        </div>
+        <div class="field">
+          <label><input type="checkbox" id="active" checked style="width:auto; margin-right:6px;"> Currently active</label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="closeMedModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="saveMedBtn">Save Medication</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/sidebar.js"></script>
+  <script>
+    requireAuth();
+
+    document.getElementById('appShell').innerHTML = `
+      ${renderSidebar('medications')}
+      <main class="main">
+        <div class="page-header">
+          <div>
+            <h1>Medications</h1>
+            <div class="sub">Keep track of what you're taking and when.</div>
+          </div>
+          <button class="btn btn-primary" style="width:auto;" onclick="openMedModal()">+ Add Medication</button>
+        </div>
+        <div class="card">
+          <div id="medTableWrap"><div class="empty-state">Loading...</div></div>
+        </div>
+      </main>
+    `;
+
+    let allMeds = [];
+
+    function openMedModal(med) {
+      document.getElementById('medForm').reset();
+      document.getElementById('medModalError').style.display = 'none';
+      document.getElementById('medModalTitle').textContent = med ? 'Edit Medication' : 'Add Medication';
+      document.getElementById('medId').value = med ? med.id : '';
+      document.getElementById('medicineName').value = med ? med.medicine_name : '';
+      document.getElementById('dosage').value = med ? (med.dosage || '') : '';
+      document.getElementById('frequency').value = med ? (med.frequency || '') : '';
+      document.getElementById('startDate').value = med ? (med.start_date || '') : '';
+      document.getElementById('endDate').value = med ? (med.end_date || '') : '';
+      document.getElementById('notes').value = med ? (med.notes || '') : '';
+      document.getElementById('active').checked = med ? !!med.active : true;
+      document.getElementById('medModal').classList.add('open');
+    }
+    function closeMedModal() {
+      document.getElementById('medModal').classList.remove('open');
+    }
+
+    async function loadMedications() {
+      const wrap = document.getElementById('medTableWrap');
+      try {
+        allMeds = await apiRequest('/medications');
+        if (!allMeds.length) {
+          wrap.innerHTML = `<div class="empty-state"><div class="big-icon">&#128138;</div>No medications tracked yet.</div>`;
+          return;
+        }
+        wrap.innerHTML = `
+          <table>
+            <thead><tr><th>Medicine</th><th>Dosage</th><th>Frequency</th><th>Start</th><th>End</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              ${allMeds.map(m => `
+                <tr>
+                  <td><strong>${escapeHtml(m.medicine_name)}</strong></td>
+                  <td>${escapeHtml(m.dosage || '-')}</td>
+                  <td>${escapeHtml(m.frequency || '-')}</td>
+                  <td>${formatDate(m.start_date)}</td>
+                  <td>${m.end_date ? formatDate(m.end_date) : '-'}</td>
+                  <td><span class="badge ${m.active ? 'badge-active' : 'badge-completed'}">${m.active ? 'Active' : 'Stopped'}</span></td>
+                  <td style="white-space:nowrap; text-align:right;">
+                    <button class="icon-btn" title="Edit" onclick="editMed(${m.id})">&#9998;</button>
+                    <button class="icon-btn danger" title="Delete" onclick="deleteMed(${m.id})">&#128465;</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+      } catch (err) {
+        wrap.innerHTML = `<div class="empty-state">Could not load medications.</div>`;
+      }
+    }
+
+    function editMed(id) {
+      const med = allMeds.find(m => m.id === id);
+      if (med) openMedModal(med);
+    }
+
+    async function deleteMed(id) {
+      if (!confirm('Delete this medication entry?')) return;
+      try {
+        await apiRequest(`/medications/${id}`, { method: 'DELETE' });
+        loadMedications();
+      } catch (err) {
+        alert(err.message || 'Could not delete medication.');
+      }
+    }
+
+    document.getElementById('medForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errBanner = document.getElementById('medModalError');
+      errBanner.style.display = 'none';
+
+      const id = document.getElementById('medId').value;
+      const payload = {
+        medicineName: document.getElementById('medicineName').value.trim(),
+        dosage: document.getElementById('dosage').value.trim(),
+        frequency: document.getElementById('frequency').value.trim(),
+        startDate: document.getElementById('startDate').value,
+        endDate: document.getElementById('endDate').value,
+        notes: document.getElementById('notes').value.trim(),
+        active: document.getElementById('active').checked,
+      };
+
+      const btn = document.getElementById('saveMedBtn');
+      btn.disabled = true; btn.textContent = 'Saving...';
+
+      try {
+        if (id) {
+          await apiRequest(`/medications/${id}`, { method: 'PUT', body: payload });
+        } else {
+          await apiRequest('/medications', { method: 'POST', body: payload });
+        }
+        closeMedModal();
+        loadMedications();
+      } catch (err) {
+        errBanner.textContent = err.message || 'Could not save medication.';
+        errBanner.style.display = 'block';
+      } finally {
+        btn.disabled = false; btn.textContent = 'Save Medication';
+      }
+    });
+
+    loadMedications();
+  </script>
+</body>
+</html>

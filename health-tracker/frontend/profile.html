@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Profile | Health Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app-shell" id="appShell"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/sidebar.js"></script>
+  <script>
+    requireAuth();
+
+    document.getElementById('appShell').innerHTML = `
+      ${renderSidebar('profile')}
+      <main class="main">
+        <div class="page-header">
+          <div>
+            <h1>My Profile</h1>
+            <div class="sub">Manage your personal and account details.</div>
+          </div>
+        </div>
+
+        <div class="card" style="max-width:520px;">
+          <div class="error-banner" id="profileError"></div>
+          <div class="success-banner" id="profileSuccess"></div>
+          <form id="profileForm">
+            <div class="field">
+              <label for="fullName">Full name</label>
+              <input type="text" id="fullName" required>
+            </div>
+            <div class="field">
+              <label for="email">Email address</label>
+              <input type="email" id="email" disabled style="background:#F0F2F1; color: var(--text-muted);">
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="phone">Phone number</label>
+                <input type="tel" id="phone">
+              </div>
+              <div class="field">
+                <label for="dateOfBirth">Date of birth</label>
+                <input type="date" id="dateOfBirth">
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="gender">Gender</label>
+                <select id="gender">
+                  <option value="">Not specified</option>
+                  <option value="Female">Female</option>
+                  <option value="Male">Male</option>
+                  <option value="Other">Other</option>
+                  <option value="Prefer not to say">Prefer not to say</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="bloodGroup">Blood group</label>
+                <select id="bloodGroup">
+                  <option value="">Not specified</option>
+                  <option>A+</option><option>A-</option>
+                  <option>B+</option><option>B-</option>
+                  <option>AB+</option><option>AB-</option>
+                  <option>O+</option><option>O-</option>
+                </select>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary" id="saveProfileBtn" style="width:auto;">Save Changes</button>
+          </form>
+        </div>
+      </main>
+    `;
+
+    async function loadProfile() {
+      try {
+        const profile = await apiRequest('/auth/profile');
+        document.getElementById('fullName').value = profile.fullName || '';
+        document.getElementById('email').value = profile.email || '';
+        document.getElementById('phone').value = profile.phone || '';
+        document.getElementById('dateOfBirth').value = profile.dateOfBirth || '';
+        document.getElementById('gender').value = profile.gender || '';
+        document.getElementById('bloodGroup').value = profile.bloodGroup || '';
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    document.getElementById('profileForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errBanner = document.getElementById('profileError');
+      const successBanner = document.getElementById('profileSuccess');
+      errBanner.style.display = 'none';
+      successBanner.style.display = 'none';
+
+      const payload = {
+        fullName: document.getElementById('fullName').value.trim(),
+        phone: document.getElementById('phone').value.trim(),
+        dateOfBirth: document.getElementById('dateOfBirth').value,
+        gender: document.getElementById('gender').value,
+        bloodGroup: document.getElementById('bloodGroup').value,
+      };
+
+      const btn = document.getElementById('saveProfileBtn');
+      btn.disabled = true; btn.textContent = 'Saving...';
+
+      try {
+        await apiRequest('/auth/profile', { method: 'PUT', body: payload });
+        const user = getUser();
+        user.fullName = payload.fullName;
+        setSession(getToken(), user);
+        successBanner.textContent = 'Profile updated successfully.';
+        successBanner.style.display = 'block';
+      } catch (err) {
+        errBanner.textContent = err.message || 'Could not update profile.';
+        errBanner.style.display = 'block';
+      } finally {
+        btn.disabled = false; btn.textContent = 'Save Changes';
+      }
+    });
+
+    loadProfile();
+  </script>
+</body>
+</html>

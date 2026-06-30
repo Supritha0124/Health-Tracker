@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Create Account | Personal Health Tracking System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="auth-wrap">
+    <div class="auth-card" style="max-width: 520px;">
+      <div class="auth-brand">
+        <div class="mark">+</div>
+        <div class="name">Health Tracker</div>
+      </div>
+      <h1>Create your account</h1>
+      <div class="auth-sub">Set up secure access to your personal health record.</div>
+
+      <div class="error-banner" id="errorBanner"></div>
+
+      <form id="registerForm" autocomplete="off">
+        <div class="field">
+          <label for="fullName">Full name</label>
+          <input type="text" id="fullName" name="fullName" placeholder="Enter your full name" autocomplete="off" required>
+        </div>
+
+        <div class="field">
+          <label for="email">Email address</label>
+          <input type="email" id="email" name="email" placeholder="you@example.com" autocomplete="off" required>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" placeholder="At least 6 characters" autocomplete="new-password" required minlength="6">
+          </div>
+          <div class="field">
+            <label for="confirmPassword">Confirm password</label>
+            <input type="password" id="confirmPassword" name="confirmPassword" placeholder="Re-enter password" autocomplete="new-password" required minlength="6">
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="phone">Phone number</label>
+            <input type="tel" id="phone" name="phone" placeholder="e.g. 9876543210" autocomplete="off" required>
+          </div>
+          <div class="field">
+            <label for="dateOfBirth">Date of birth</label>
+            <input type="date" id="dateOfBirth" name="dateOfBirth" autocomplete="off">
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="gender">Gender</label>
+            <select id="gender" name="gender" autocomplete="off" required>
+              <option value="">Select</option>
+              <option value="Female">Female</option>
+              <option value="Male">Male</option>
+              <option value="Other">Other</option>
+              <option value="Prefer not to say">Prefer not to say</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="bloodGroup">Blood group</label>
+            <select id="bloodGroup" name="bloodGroup" autocomplete="off">
+              <option value="">Select (optional)</option>
+              <option>A+</option><option>A-</option>
+              <option>B+</option><option>B-</option>
+              <option>AB+</option><option>AB-</option>
+              <option>O+</option><option>O-</option>
+            </select>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary" id="registerBtn">Create Account</button>
+      </form>
+
+      <div class="auth-footer">
+        Already have an account? <a href="index.html">Sign in</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    if (getToken()) {
+      window.location.href = 'dashboard.html';
+    }
+
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errorBanner = document.getElementById('errorBanner');
+      errorBanner.style.display = 'none';
+
+      const fullName = document.getElementById('fullName').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const confirmPassword = document.getElementById('confirmPassword').value;
+      const phone = document.getElementById('phone').value.trim();
+      const dateOfBirth = document.getElementById('dateOfBirth').value;
+      const gender = document.getElementById('gender').value;
+      const bloodGroup = document.getElementById('bloodGroup').value;
+
+      if (password !== confirmPassword) {
+        errorBanner.textContent = 'Passwords do not match.';
+        errorBanner.style.display = 'block';
+        return;
+      }
+
+      if (!phone) {
+        errorBanner.textContent = 'Phone number is required.';
+        errorBanner.style.display = 'block';
+        return;
+      }
+
+      if (!gender) {
+        errorBanner.textContent = 'Gender is required.';
+        errorBanner.style.display = 'block';
+        return;
+      }
+
+      const btn = document.getElementById('registerBtn');
+      btn.disabled = true;
+      btn.textContent = 'Creating account...';
+
+      try {
+        await apiRequest('/auth/register', {
+          method: 'POST',
+          body: { fullName, email, password, phone, dateOfBirth, gender, bloodGroup },
+        });
+        window.location.href = 'index.html?registered=1';
+      } catch (err) {
+        errorBanner.textContent = err.message || 'Could not create account.';
+        errorBanner.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Create Account';
+      }
+    });
+  </script>
+</body>
+</html>

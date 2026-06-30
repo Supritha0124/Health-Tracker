@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard | Health Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app-shell" id="appShell"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/sidebar.js"></script>
+  <script>
+    requireAuth();
+    const user = getUser();
+
+    document.getElementById('appShell').innerHTML = `
+      ${renderSidebar('dashboard')}
+      <main class="main">
+        <div class="page-header">
+          <div>
+            <h1>Welcome, ${escapeHtml((user.fullName || '').split(' ')[0] || 'there')}</h1>
+            <div class="sub">Here's a snapshot of your health records.</div>
+          </div>
+        </div>
+
+        <div class="stat-strip" id="statStrip"></div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Upcoming Appointments</h2>
+            <a href="appointments.html" class="btn btn-outline btn-sm">View all</a>
+          </div>
+          <div id="apptList"><div class="empty-state">Loading...</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Active Medications</h2>
+            <a href="medications.html" class="btn btn-outline btn-sm">View all</a>
+          </div>
+          <div id="medList"><div class="empty-state">Loading...</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Recent Medical Records</h2>
+            <a href="records.html" class="btn btn-outline btn-sm">View all</a>
+          </div>
+          <div id="recordList"><div class="empty-state">Loading...</div></div>
+        </div>
+      </main>
+    `;
+
+    async function loadDashboard() {
+      try {
+        const [records, appointments, medications] = await Promise.all([
+          apiRequest('/records'),
+          apiRequest('/appointments'),
+          apiRequest('/medications'),
+        ]);
+
+        const activeMeds = medications.filter(m => m.active);
+        const upcomingAppts = appointments.filter(a => a.status === 'scheduled').slice(0, 5);
+
+        document.getElementById('statStrip').innerHTML = `
+          <div class="stat-pill"><span class="dot"></span><div><div class="num">${records.length}</div><div class="lbl">Medical Records</div></div></div>
+          <div class="stat-pill"><span class="dot"></span><div><div class="num">${upcomingAppts.length}</div><div class="lbl">Upcoming Appointments</div></div></div>
+          <div class="stat-pill"><span class="dot"></span><div><div class="num">${activeMeds.length}</div><div class="lbl">Active Medications</div></div></div>
+        `;
+
+        const apptList = document.getElementById('apptList');
+        apptList.innerHTML = upcomingAppts.length ? `
+          <table><thead><tr><th>Doctor</th><th>Specialization</th><th>Date</th><th>Time</th></tr></thead>
+          <tbody>${upcomingAppts.map(a => `
+            <tr>
+              <td>${escapeHtml(a.doctor_name)}</td>
+              <td>${escapeHtml(a.specialization || '-')}</td>
+              <td>${formatDate(a.appointment_date)}</td>
+              <td>${escapeHtml(a.appointment_time || '-')}</td>
+            </tr>`).join('')}
+          </tbody></table>
+        ` : `<div class="empty-state"><div class="big-icon">&#128197;</div>No upcoming appointments scheduled.</div>`;
+
+        const medList = document.getElementById('medList');
+        medList.innerHTML = activeMeds.length ? `
+          <table><thead><tr><th>Medicine</th><th>Dosage</th><th>Frequency</th></tr></thead>
+          <tbody>${activeMeds.slice(0, 5).map(m => `
+            <tr>
+              <td>${escapeHtml(m.medicine_name)}</td>
+              <td>${escapeHtml(m.dosage || '-')}</td>
+              <td>${escapeHtml(m.frequency || '-')}</td>
+            </tr>`).join('')}
+          </tbody></table>
+        ` : `<div class="empty-state"><div class="big-icon">&#128138;</div>No active medications tracked.</div>`;
+
+        const recordList = document.getElementById('recordList');
+        recordList.innerHTML = records.length ? `
+          <table><thead><tr><th>Title</th><th>Type</th><th>Date</th></tr></thead>
+          <tbody>${records.slice(0, 5).map(r => `
+            <tr>
+              <td>${escapeHtml(r.title)}</td>
+              <td>${escapeHtml(r.record_type || '-')}</td>
+              <td>${formatDate(r.record_date || r.created_at)}</td>
+            </tr>`).join('')}
+          </tbody></table>
+        ` : `<div class="empty-state"><div class="big-icon">&#128196;</div>No medical records uploaded yet.</div>`;
+
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    loadDashboard();
+  </script>
+</body>
+</html>
