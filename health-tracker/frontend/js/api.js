@@ -1,5 +1,5 @@
 // Centralized API helper for the Personal Health Tracking System frontend
-const API_BASE = '/api';
+const API_BASE = 'https://health-tracker-3eff.onrender.com/api';
 
 function getToken() {
   return localStorage.getItem('pht_token');
